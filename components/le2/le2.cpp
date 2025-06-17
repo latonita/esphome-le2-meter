@@ -29,7 +29,7 @@ static const uint8_t ESC_AA = 0x01;
 
 static constexpr uint32_t NO_GOOD_READS_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
 
-static constexpr size_t RX_BUFFER_SIZE = 64u;
+static constexpr size_t RX_BUFFER_SIZE = 256u;
 static std::array<uint8_t, RX_BUFFER_SIZE> rxBuffer;
 
 static inline int bcd2dec(uint8_t hex) {
@@ -60,7 +60,7 @@ typedef struct {
 
 typedef struct {
   le2_frame_header_t header;
-  time_t production_date;
+  uint32_t production_date;
   uint32_t serial_number;
   uint32_t network_address;
   uint8_t type;
@@ -83,7 +83,7 @@ typedef struct {
 
 typedef struct {
   le2_frame_header_t header;
-  time_t dtm;
+  uint32_t dtm;
   float u;
   float i_ph;
   float p_a_phase;
@@ -319,14 +319,46 @@ bool LE2Component::process_response() {
   auto &tracker = this->request_tracker_;
   auto now = millis();
 
-  // Check timeout
-  ESP_LOGVV(TAG, "process_resp(), read=%d, exp=%d", tracker.bytes_read, tracker.expected_size);
+  static auto got = 0;
+  if (got != tracker.bytes_read) {
+    got = tracker.bytes_read;
+    ESP_LOGVV(TAG, "process_resp(), read=%d, exp=%d", tracker.bytes_read, tracker.expected_size);
+  }
 
+  // Check timeout
   if (now - tracker.start_time > this->receive_timeout_) {
     ESP_LOGE(TAG, "Response timeout");
     this->data_.readErrors++;
     // Return to main FSM with failure
     this->state_ = this->next_state_;
+    ESP_LOGD(TAG,"Timeout, got = %d", tracker.bytes_read);
+
+    // if (tracker.bytes_read > 0 && tracker.expected_size == 143) {
+    //   // print by 16 bytes
+    //   for (int i = 0; i < tracker.bytes_read; i++) {
+    //     ESP_LOGV(TAG, "RX [%03d]: 0x%02x", i, rxBuffer[i]);
+    //     delay(50);
+    //     yield();
+    //   }
+
+    //   // size_t to_show = tracker.bytes_read;
+    //   // uint8_t *ptr = rxBuffer.data();
+    //   // while (to_show > 0) {
+    //   //   if (to_show > 16) {
+    //   //     ESP_LOGVV(TAG, "RX: %s", format_hex_pretty(ptr, 16));
+    //   //     to_show -= 16;
+    //   //     ptr += 16;
+    //   //   } else {
+    //   //     ESP_LOGVV(TAG, "RX: %s", format_hex_pretty(ptr, to_show));
+    //   //     to_show = 0;
+    //   //   }
+    //   //   // ESP_LOGVV(TAG, "RX: %s",
+    //   //           format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()));
+    // }
+
+    // ESP_LOGVV(TAG, "RX: %s",
+    //           format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read).c_str());
+
     return false;
   }
 
@@ -350,6 +382,15 @@ bool LE2Component::process_response() {
     ESP_LOGV(TAG, "Received all bytes, validating...");
     ESP_LOGVV(TAG, "RX: %s",
               format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read).c_str());
+
+    // CRC of message + its CRC = 0x0F47
+    if (crc_16_iec(rxBuffer.data() + 1, tracker.expected_size - 1) != MESSAGE_CRC_IEC) {
+      ESP_LOGE(TAG, "CRC check failed");
+      this->data_.readErrors++;
+      // Return to main FSM with failure
+      this->state_ = this->next_state_;
+      return false;
+    }
 
     if (tracker.escape_seq_found > 0) {
       ESP_LOGD(TAG, "Found %d escape sequences", tracker.escape_seq_found);
@@ -378,15 +419,6 @@ bool LE2Component::process_response() {
       }
       tracker.bytes_read -= tracker.escape_seq_found;     // Adjust the size after processing escape sequences
       tracker.expected_size -= tracker.escape_seq_found;  // Adjust expected size
-    }
-
-    // CRC of message + its CRC = 0x0F47
-    if (crc_16_iec(rxBuffer.data() + 1, tracker.expected_size - 1) != MESSAGE_CRC_IEC) {
-      ESP_LOGE(TAG, "CRC check failed");
-      this->data_.readErrors++;
-      // Return to main FSM with failure
-      this->state_ = this->next_state_;
-      return false;
     }
 
     // Process the received data
