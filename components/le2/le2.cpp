@@ -204,19 +204,19 @@ void LE2Component::loop() {
       // }
 
       // Publish meter info if available
-      if (this->data_.meterFound) {
-        if (this->network_address_ != nullptr) {
-          this->network_address_->publish_state(to_string(this->data_.networkAddress));
-        }
-        if (this->serial_nr_ != nullptr) {
-          this->serial_nr_->publish_state(to_string(this->data_.serialNumber));
-        }
-        if (this->reading_state_ != nullptr && !this->data_.initialized) {
-          this->reading_state_->publish_state(STATE_METER_FOUND);
-        }
-      } else if (this->reading_state_ != nullptr && !this->data_.initialized) {
-        this->reading_state_->publish_state(STATE_METER_NOT_FOUND);
-      }
+      // if (this->data_.meterFound) {
+      //   if (this->network_address_ != nullptr) {
+      //     this->network_address_->publish_state(to_string(this->data_.networkAddress));
+      //   }
+      //   if (this->serial_nr_ != nullptr) {
+      //     this->serial_nr_->publish_state(to_string(this->data_.serialNumber));
+      //   }
+      //   if (this->reading_state_ != nullptr && !this->data_.initialized) {
+      //     this->reading_state_->publish_state(STATE_METER_FOUND);
+      //   }
+      // } else if (this->reading_state_ != nullptr && !this->data_.initialized) {
+      //   this->reading_state_->publish_state(STATE_METER_NOT_FOUND);
+      // }
 
       // // Publish date/time if available
       // if (this->data_.got & MASK_GOT_DATE_TIME) {
@@ -291,7 +291,8 @@ void LE2Component::send_enquiry_command(EnqCmd cmd) {
   txBuffer.header.password = 1084852935;  // 0x0;
   txBuffer.header.com = static_cast<uint8_t>(ComType::Enq);
   txBuffer.header.function = static_cast<uint8_t>(cmd);
-  txBuffer.crc16 = crc_16_iec((const uint8_t *) &txBuffer+1, sizeof(le2_request_command_t) - 3);  // minus 2 bytes for CRC minus 1 for frame magic
+  txBuffer.crc16 = crc_16_iec((const uint8_t *) &txBuffer + 1,
+                              sizeof(le2_request_command_t) - 3);  // minus 2 bytes for CRC minus 1 for frame magic
 
   write_array((const uint8_t *) &txBuffer, sizeof(le2_request_command_t));
   flush();
