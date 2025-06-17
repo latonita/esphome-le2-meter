@@ -116,19 +116,19 @@ void LE2Component::dump_config() {
   ESP_LOGCONFIG(TAG, "  Receive timeout: %.1fs", this->receive_timeout_ / 1e3f);
   ESP_LOGCONFIG(TAG, "  Update interval: %.1fs", this->update_interval_ / 1e3f);
   LOG_PIN("  Flow Control Pin: ", this->flow_control_pin_);
-  LOG_SENSOR("  ", "Active power", this->active_power_);
-  LOG_SENSOR("  ", "Energy total", this->energy_total_);
-  LOG_SENSOR("  ", "Energy consumed total", this->energy_total_);
-  LOG_SENSOR("  ", "Energy consumed tariff 1", this->energy_t1_);
-  LOG_SENSOR("  ", "Energy consumed tariff 2", this->energy_t2_);
-  LOG_SENSOR("  ", "Energy consumed tariff 3", this->energy_t3_);
-  LOG_SENSOR("  ", "Energy consumed tariff 4", this->energy_t4_);
+  // LOG_SENSOR("  ", "Active power", this->active_power_);
+  // LOG_SENSOR("  ", "Energy total", this->energy_total_);
+  // LOG_SENSOR("  ", "Energy consumed total", this->energy_total_);
+  // LOG_SENSOR("  ", "Energy consumed tariff 1", this->energy_t1_);
+  // LOG_SENSOR("  ", "Energy consumed tariff 2", this->energy_t2_);
+  // LOG_SENSOR("  ", "Energy consumed tariff 3", this->energy_t3_);
+  // LOG_SENSOR("  ", "Energy consumed tariff 4", this->energy_t4_);
   LOG_TEXT_SENSOR("  ", "Electricity tariff", this->tariff_);
   LOG_TEXT_SENSOR("  ", "Date", this->date_);
   LOG_TEXT_SENSOR("  ", "Time", this->time_);
   LOG_TEXT_SENSOR("  ", "Network address", this->network_address_);
   LOG_TEXT_SENSOR("  ", "Serial number", this->serial_nr_);
-  this->check_uart_settings(9600, 1, uart::UART_CONFIG_PARITY_EVEN, 8);
+//  this->check_uart_settings(9600, 1, uart::UART_CONFIG_PARITY_EVEN, 8);
   ESP_LOGCONFIG(TAG, "Data errors %d, proper reads %d", this->data_.readErrors, this->data_.properReads);
 }
 
