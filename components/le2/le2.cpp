@@ -128,7 +128,7 @@ void LE2Component::dump_config() {
   LOG_TEXT_SENSOR("  ", "Time", this->time_);
   LOG_TEXT_SENSOR("  ", "Network address", this->network_address_);
   LOG_TEXT_SENSOR("  ", "Serial number", this->serial_nr_);
-//  this->check_uart_settings(9600, 1, uart::UART_CONFIG_PARITY_EVEN, 8);
+  //  this->check_uart_settings(9600, 1, uart::UART_CONFIG_PARITY_EVEN, 8);
   ESP_LOGCONFIG(TAG, "Data errors %d, proper reads %d", this->data_.readErrors, this->data_.properReads);
 }
 
@@ -286,12 +286,12 @@ void LE2Component::send_enquiry_command(EnqCmd cmd) {
     this->flow_control_pin_->digital_write(true);
 
   txBuffer.header.magic = 0xAA;  // magic
-  txBuffer.header.length = sizeof(le2_request_command_t);
+  txBuffer.header.length = sizeof(le2_request_command_t) - 1;
   txBuffer.header.address = this->requested_meter_address_;
   txBuffer.header.password = 1084852935;  // 0x0;
   txBuffer.header.com = static_cast<uint8_t>(ComType::Enq);
   txBuffer.header.function = static_cast<uint8_t>(cmd);
-  txBuffer.crc16 = crc_16_iec((const uint8_t *) &txBuffer, sizeof(le2_request_command_t) - 2);  // minus 2 bytes for CRC
+  txBuffer.crc16 = crc_16_iec((const uint8_t *) &txBuffer+1, sizeof(le2_request_command_t) - 3);  // minus 2 bytes for CRC minus 1 for frame magic
 
   write_array((const uint8_t *) &txBuffer, sizeof(le2_request_command_t));
   flush();
