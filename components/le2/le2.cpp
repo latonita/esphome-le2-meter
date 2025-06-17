@@ -320,6 +320,8 @@ bool LE2Component::process_response() {
   auto now = millis();
 
   // Check timeout
+  ESP_LOGVV(TAG, "process_resp(), read=%d, exp=%d", tracker.bytes_read, tracker.expected_size);
+
   if (now - tracker.start_time > this->receive_timeout_) {
     ESP_LOGE(TAG, "Response timeout");
     this->data_.readErrors++;

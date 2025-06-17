@@ -101,7 +101,7 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   text_sensor::TextSensor *reading_state_{nullptr};
 
   GPIOPin *flow_control_pin_{nullptr};
-  uint32_t receive_timeout_{0};
+  uint32_t receive_timeout_{2000};
   uint32_t requested_meter_address_{0};
 
   InternalDataState data_{};
