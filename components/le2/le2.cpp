@@ -30,14 +30,10 @@ static const uint8_t ESC_55 = 0x02;
 
 static constexpr uint32_t NO_GOOD_READS_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
 
-static constexpr size_t RX_BUFFER_SIZE = 256u;
-static std::array<uint8_t, RX_BUFFER_SIZE> rxBuffer;
-
 enum class ComType : uint8_t { Enq = 0x01 };
 
 #pragma pack(1)
 typedef struct {
-  uint8_t magic;          // 0xAA
   uint8_t length;         // Length of the frame, including header and CRC16
   uint32_t address;       // Network address of the meter
   uint16_t password_low;  // low 16 bits of password for the meter, usually 11111111
@@ -85,7 +81,11 @@ typedef struct {
 
 #pragma pack(0)
 
-static le2_request_command_t txBuffer;
+static le2_request_command_t txCmd;
+static uint8_t txBufferFrame[sizeof(le2_request_command_t) * 2 + 1];
+
+static constexpr size_t RX_BUFFER_SIZE = 256u;
+static std::array<uint8_t, RX_BUFFER_SIZE> rxBuffer;
 
 float LE2Component::get_setup_priority() const { return setup_priority::AFTER_WIFI; }
 
@@ -285,31 +285,78 @@ void LE2Component::update() {
   this->state_ = State::GET_METER_INFO;
 }
 
+size_t slip_encode(uint8_t *data_out, const uint8_t *data_in, size_t size_in) {
+  size_t size_out = 0;
+  data_out[size_out++] = MAGIC;  // Start with the frame separator byte
+  for (size_t i = 0; i < size_in; ++i) {
+    switch (data_in[i]) {
+      case ESC_START:
+        data_out[size_out++] = ESC_START;
+        data_out[size_out++] = ESC_55;  // Escape sequence for ESC_START
+        break;
+      case MAGIC:
+        data_out[size_out++] = ESC_START;
+        data_out[size_out++] = ESC_AA;  // Escape sequence for MAGIC
+        break;
+      default:
+        data_out[size_out++] = data_in[i];  // Normal byte, just copy it
+        break;
+    }
+  }
+  return size_out;  // Return the size of the encoded data
+}
+
+size_t slip_decode_inplace(uint8_t *data, size_t size_in) {
+  size_t write_index = 0;
+  if (size_in == 0) {
+    return 0;  // Nothing to decode
+  }
+  if (data[0] != MAGIC) {
+    ESP_LOGE(TAG, "Invalid frame start byte: 0x%02X", data[0]);
+    return 0;  // Invalid frame start
+  }
+  for (size_t read_index = 1; read_index < size_in; ++read_index) {
+    if (data[read_index] == ESC_START) {
+      read_index++;
+      if (read_index < size_in) {
+        if (data[read_index] == ESC_AA) {
+          data[write_index++] = MAGIC;
+        } else if (data[read_index] == ESC_55) {
+          data[write_index++] = ESC_START;
+        } else {
+          ESP_LOGE(TAG, "Invalid escape sequence: 0x%02X", data[read_index]);
+          return 0;  // Invalid escape sequence
+        }
+      }
+    } else {
+      data[write_index++] = data[read_index];
+    }
+  }
+  return write_index;  // Update size to the new length
+}
+
 void LE2Component::send_enquiry_command(EnqCmd cmd) {
   if (this->flow_control_pin_ != nullptr)
     this->flow_control_pin_->digital_write(true);
 
-  txBuffer.header.magic = 0xAA;  // magic
-  txBuffer.header.length = sizeof(le2_request_command_t) - 1;
-  txBuffer.header.address = this->requested_meter_address_;
-  txBuffer.header.password_low = this->password_ & 0xFFFF;
-  txBuffer.header.password_high = (this->password_ >> 16) & 0xFF;
-  txBuffer.header.access = 0x40;  // read access
-  txBuffer.header.com = static_cast<uint8_t>(ComType::Enq);
-  txBuffer.header.function = static_cast<uint8_t>(cmd);
+  txCmd.header.length = sizeof(le2_request_command_t);
+  txCmd.header.address = this->requested_meter_address_;
+  txCmd.header.password_low = this->password_ & 0xFFFF;
+  txCmd.header.password_high = (this->password_ >> 16) & 0xFF;
+  txCmd.header.access = 0x40;  // read access
+  txCmd.header.com = static_cast<uint8_t>(ComType::Enq);
+  txCmd.header.function = static_cast<uint8_t>(cmd);
+  txCmd.crc16 = crc_16_iec((const uint8_t *) &txCmd, sizeof(le2_request_command_t) - 2);
 
-  // minus 2 bytes for CRC minus 1 for frame separator byte (0xAA)
-  txBuffer.crc16 = crc_16_iec((const uint8_t *) &txBuffer + 1, sizeof(le2_request_command_t) - 3);
+  size_t frame_size = slip_encode(txBufferFrame, (const uint8_t *) &txCmd, sizeof(le2_request_command_t));
 
-  // todo: SLIP encode! AA -> 55 01, 55 -> 55 02
-
-  write_array((const uint8_t *) &txBuffer, sizeof(le2_request_command_t));
+  write_array(txBufferFrame, frame_size);
   flush();
 
   if (this->flow_control_pin_ != nullptr)
     this->flow_control_pin_->digital_write(false);
 
-  ESP_LOGVV(TAG, "TX: %s", format_hex_pretty((const uint8_t *) &txBuffer, sizeof(le2_request_command_t)).c_str());
+  ESP_LOGVV(TAG, "TX: %s", format_hex_pretty(txBufferFrame, frame_size).c_str());
 }
 
 void LE2Component::start_async_request(EnqCmd cmd, uint16_t expected_size, State next_state) {
@@ -327,11 +374,8 @@ bool LE2Component::process_response() {
   auto &tracker = this->request_tracker_;
   auto now = millis();
 
-  static auto got = 0;
-  if (got != tracker.bytes_read) {
-    got = tracker.bytes_read;
-    ESP_LOGVV(TAG, "process_resp(), read=%d, exp=%d", tracker.bytes_read, tracker.expected_size);
-  }
+  // ESP_LOGV(TAG, "Processing response expected size %d, received so far %d", tracker.expected_size,
+  // tracker.bytes_read);
 
   // Check timeout
   if (now - tracker.start_time > this->receive_timeout_) {
@@ -341,13 +385,13 @@ bool LE2Component::process_response() {
       ESP_LOGVV(TAG, "RX: %s",
                 format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read).c_str());
     }
-    // Return to main FSM with failure
     this->state_ = this->next_state_;
     return false;
   }
 
   // Read available data
-  while (available() > 0 && tracker.bytes_read < tracker.expected_size) {
+  // We need to read expected + 1 magic + 1 for each 0x55 byte
+  while (available() > 0 && tracker.bytes_read < tracker.expected_size + 1) {
     int currentByte = read();
     if (currentByte >= 0) {
       rxBuffer[tracker.bytes_read++] = static_cast<uint8_t>(currentByte);
@@ -359,10 +403,8 @@ bool LE2Component::process_response() {
     yield();
   }
 
-  // ESP_LOGV(TAG, "Bytes read so far: %d of %d", tracker.bytes_read, tracker.expected_size);
-
   // Check if we have received all expected bytes
-  if (tracker.bytes_read != tracker.expected_size) {
+  if (tracker.bytes_read != tracker.expected_size + 1) {
     // wait for more data
     return false;
   }
@@ -371,50 +413,18 @@ bool LE2Component::process_response() {
   ESP_LOGVV(TAG, "RX: %s",
             format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read).c_str());
 
-  if (tracker.escape_seq_found > 0) {
-    ESP_LOGD(TAG, "Found %d escape sequences", tracker.escape_seq_found);
-    // Process escape sequences ESC_START+ESC_AA => MAGIC
-    //
-
-    // Input example  : AA 01 02 55 01 04 05
-    // Output example : AA 01 02 AA 04 05
-
-    uint8_t *data_ptr = rxBuffer.data();
-    uint8_t *end_ptr = data_ptr + tracker.bytes_read;
-    uint8_t *write_ptr = data_ptr;
-
-    while (data_ptr < end_ptr) {
-      if (*data_ptr == ESC_START) {
-        // Found escape sequence, replace with MAGIC.
-        *write_ptr = ESC_START;
-        data_ptr++;
-        if (data_ptr < end_ptr) {
-          if (*data_ptr == ESC_AA) {
-            *write_ptr = MAGIC;
-          } else if (*data_ptr == ESC_55) {
-            *write_ptr = ESC_START;  // keep the escape sequence as is
-          } else {
-            ESP_LOGE(TAG, "Unexpected escape sequence: 0x%02X", *data_ptr);
-            // return false; // Invalid escape sequence
-          }
-          // Skip the next byte (ESC_AA)
-          data_ptr++;
-        }
-        *write_ptr++;
-      } else {
-        // Copy the byte as is
-        *write_ptr++ = *data_ptr++;
-      }
-    }
-    tracker.bytes_read -= tracker.escape_seq_found;     // Adjust the size after processing escape sequences
-    tracker.expected_size -= tracker.escape_seq_found;  // Adjust expected size
+  size_t decoded_size = slip_decode_inplace(rxBuffer.data(), tracker.bytes_read);
+  if (decoded_size == 0) {
+    ESP_LOGE(TAG, "Received SLIP packed corrupted");
+    this->data_.readErrors++;
+    this->state_ = this->next_state_;
+    return false;
   }
 
   // CRC of message + its CRC = 0x0F47
-  if (crc_16_iec(rxBuffer.data() + 1, tracker.expected_size - 1) != MESSAGE_CRC_IEC) {
+  if (crc_16_iec(rxBuffer.data(), decoded_size) != MESSAGE_CRC_IEC) {
     ESP_LOGE(TAG, "CRC check failed");
     this->data_.readErrors++;
-    // Return to main FSM with failure
     this->state_ = this->next_state_;
     return false;
   }
@@ -478,9 +488,9 @@ bool LE2Component::process_received_data() {
 
       ESP_LOGI(TAG,
                "Got reply from meter with s/n %u (0x%08X), network address %u, "
-               "fw ver. %02X hw ver. %02X, type %02X, error code %llu, production date %s",
-               res.serial_number, res.serial_number, res.network_address, res.fw_ver, res.hw_ver, res.type, res.error,
-               this->data_.meterInfo.production_date_str);
+               "fw ver. %02X hw ver. %02X, type %02X, production date %s, error code %llu",
+               res.serial_number, res.serial_number, res.network_address, res.fw_ver, res.hw_ver, res.type,
+               this->data_.meterInfo.production_date_str, res.error);
 
       if (!this->data_.meterFound) {
         this->data_.meterFound = true;
