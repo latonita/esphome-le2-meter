@@ -85,6 +85,10 @@ sensor:
       export_active_energy: "T2 Export Active Energy"
       import_reactive_energy: "T2 Import Reactive Energy"
       export_reactive_energy: "T2 Export Reactive Energy"
+    # всего 8 тарифов
+    # ... 
+    # tariff_8:
+    # ...
     phase:
       current: "Phase Current"
       active_power: "Phase Active Power"
