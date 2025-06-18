@@ -20,7 +20,7 @@ CONF_ELECTRO_TARIFF = "electricity_tariff"
 CONF_NETWORK_ADDRESS = "network_address"
 CONF_SERIAL_NR = "serial_nr"
 CONF_READING_STATE = "reading_state"
-CONF_ERRORS = "errors"
+CONF_ERROR_CODE = "error_code"
 
 TEXT_SENSORS = [
     CONF_ELECTRO_TARIFF,
@@ -30,7 +30,7 @@ TEXT_SENSORS = [
     CONF_NETWORK_ADDRESS,
     CONF_SERIAL_NR,
     CONF_READING_STATE,
-    CONF_ERRORS,
+    CONF_ERROR_CODE,
 ]
 
 CONFIG_SCHEMA = cv.Schema(
@@ -76,7 +76,7 @@ CONFIG_SCHEMA = cv.Schema(
             ),
             key=CONF_NAME,
         ),
-        cv.Optional(CONF_ERRORS): cv.maybe_simple_value(
+        cv.Optional(CONF_ERROR_CODE): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
             ),

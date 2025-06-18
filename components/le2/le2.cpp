@@ -201,8 +201,8 @@ void LE2Component::loop() {
         if (this->serial_nr_text_sensor_ != nullptr) {
           this->serial_nr_text_sensor_->publish_state(to_string(this->data_.meterInfo.serial_number));
         }
-        if (this->errors_text_sensor_ != nullptr) {
-          this->errors_text_sensor_->publish_state(to_string(this->data_.meterInfo.errors));
+        if (this->error_code_text_sensor_ != nullptr) {
+          this->error_code_text_sensor_->publish_state(to_string(this->data_.meterInfo.error_code));
         }
         if (this->reading_state_text_sensor_ != nullptr && !this->data_.initialized) {
           this->reading_state_text_sensor_->publish_state(STATE_METER_FOUND);
@@ -325,7 +325,7 @@ bool LE2Component::process_response() {
 
   // Check timeout
   if (now - tracker.start_time > this->receive_timeout_) {
-    ESP_LOGE(TAG, "Response timeout");
+    ESP_LOGE(TAG, "Response timeout read=%d, exp=%d", tracker.bytes_read, tracker.expected_size);
     this->data_.readErrors++;
     if (tracker.bytes_read > 0) {
       ESP_LOGVV(TAG, "RX: %s",
@@ -447,7 +447,7 @@ bool LE2Component::process_received_data() {
       this->data_.meterInfo.type = res.type;
       this->data_.meterInfo.fw_version = res.fw_ver;
       this->data_.meterInfo.hw_version = res.hw_ver;
-      this->data_.meterInfo.errors = res.error;
+      this->data_.meterInfo.error_code = res.error;
 
       time_t d = res.production_date;
       strftime(this->data_.meterInfo.production_date_str, sizeof(this->data_.meterInfo.production_date_str), "%Y-%m-%d",
@@ -455,7 +455,7 @@ bool LE2Component::process_received_data() {
 
       ESP_LOGI(TAG,
                "Got reply from meter with s/n %u (0x%08X), network address %u, "
-               "fw ver. %02X hw ver. %02X, type %02X, errors %llu, production date %s",
+               "fw ver. %02X hw ver. %02X, type %02X, error code %llu, production date %s",
                res.serial_number, res.serial_number, res.network_address, res.fw_ver, res.hw_ver, res.type, res.error,
                this->data_.meterInfo.production_date_str);
 

@@ -35,7 +35,7 @@ struct InternalDataState {
     uint8_t type{0};
     uint8_t hw_version{0};
     uint8_t fw_version{0};
-    uint64_t errors{0};
+    uint64_t error_code{0};
   } meterInfo;
 
   uint32_t properReads{0};
@@ -65,7 +65,7 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   SUB_TEXT_SENSOR(network_address)
   SUB_TEXT_SENSOR(serial_nr)
   SUB_TEXT_SENSOR(reading_state)
-  SUB_TEXT_SENSOR(errors)
+  SUB_TEXT_SENSOR(error_code)
 #endif
 
  public:
