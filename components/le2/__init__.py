@@ -8,6 +8,7 @@ from esphome.const import (
     CONF_FLOW_CONTROL_PIN,
     CONF_RECEIVE_TIMEOUT,
     CONF_UPDATE_INTERVAL,
+    CONF_PASSWORD,
 )
 
 CODEOWNERS = ["@latonita"]
@@ -28,6 +29,7 @@ CONFIG_SCHEMA = cv.All(
             cv.GenerateID(): cv.declare_id(LE2Component),
             cv.Optional(CONF_FLOW_CONTROL_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_ADDRESS, default=0): cv.int_range (min=0x0, max=0xffffffff),
+            cv.Optional(CONF_PASSWORD, default=0): cv.int_range (min=0x0, max=0xffffffff),
             cv.Optional(CONF_RECEIVE_TIMEOUT, default="500ms"): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_UPDATE_INTERVAL, default="30s"): cv.update_interval,
         }
@@ -48,6 +50,7 @@ async def to_code(config):
 
     cg.add(var.set_receive_timeout(config[CONF_RECEIVE_TIMEOUT].total_milliseconds))
     cg.add(var.set_requested_meter_address(config[CONF_ADDRESS]))
+    cg.add(var.set_password(config[CONF_PASSWORD]))
 
     if CONF_FLOW_CONTROL_PIN in config:
         pin = await cg.gpio_pin_expression(config[CONF_FLOW_CONTROL_PIN])

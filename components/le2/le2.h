@@ -11,29 +11,21 @@ namespace le2 {
 struct InternalDataState {
   struct Readings {
     uint8_t currentTariff;
-    float A[8];
-    float A_returned[8];
-    float R[8];
-    float R_returned[8];
+    float consumption[4][8];  // [consumption_type][tariff] for A+, A-, R+, R- (0-3)
   } energy;
 
   // grid parameters
   struct GridParameters {
-    time_t dtm;
+    uint32_t dtm;
     float u;
-    float i_ph;
-    float p_a_phase;
-    float p_r_phase;
-    float cos_pi_phase;
-    float i_neutral;
-    float p_a_neutral;
-    float p_r_neutral;
-    float cos_pi_neutral;
+    float measurements[2][4];  // [phase][measurement]
     float freq;
   } grid;
 
   char timeStr[9]{0};   // "23:59:99"
   char dateStr[11]{0};  // "30/08/2023"
+
+  char dateTimeStr[25]{0};  // "30/08/2023 23:59:59"
 
   uint32_t serialNumber{0};
   uint32_t networkAddress{0};
@@ -48,33 +40,36 @@ struct InternalDataState {
 };
 
 enum class EnqCmd : uint8_t {
-  ConsumedEnergy = 0x01,  // read current tariff and consumed energy A+,A-,R+,R- for 8 tariffs
+  ConsumedEnergy = 0x01,  // read current tariff and consumed energy A+, A-, R+, R- for 8 tariffs
   GridParameters = 0x05,  // read datetime and grid parameters - voltage, frequency, etc.
   MeterInfo = 0xF0,       // read meter info - serial number, network address, errors, etc.
 };
 
 class LE2Component : public PollingComponent, public uart::UARTDevice {
+  SUB_SENSOR(frequency)
+  SUB_SENSOR(voltage)
+
+#ifdef USE_TEXT_SENSOR
+  SUB_TEXT_SENSOR(electricity_tariff)
+  SUB_TEXT_SENSOR(date)
+  SUB_TEXT_SENSOR(time)
+  SUB_TEXT_SENSOR(datetime)
+  SUB_TEXT_SENSOR(network_address)
+  SUB_TEXT_SENSOR(serial_nr)
+  SUB_TEXT_SENSOR(reading_state)
+#endif
+
  public:
   LE2Component() = default;
 
-  //  replace with SUB_SENSOR()
-  void set_active_power_sensor(sensor::Sensor *active_power) { this->active_power_ = active_power; }
-  void set_energy_total_sensor(sensor::Sensor *energy_total) { this->energy_total_ = energy_total; }
-  void set_energy_t1_sensor(sensor::Sensor *energy_t1) { this->energy_t1_ = energy_t1; }
-  void set_energy_t2_sensor(sensor::Sensor *energy_t2) { this->energy_t2_ = energy_t2; }
-  void set_energy_t3_sensor(sensor::Sensor *energy_t3) { this->energy_t3_ = energy_t3; }
-  void set_energy_t4_sensor(sensor::Sensor *energy_t4) { this->energy_t4_ = energy_t4; }
 
-  void set_electricity_tariff_text_sensor(text_sensor::TextSensor *tariff) { this->tariff_ = tariff; }
-  void set_date_text_sensor(text_sensor::TextSensor *date) { this->date_ = date; }
-  void set_time_text_sensor(text_sensor::TextSensor *time) { this->time_ = time; }
-  void set_network_address_text_sensor(text_sensor::TextSensor *address) { this->network_address_ = address; }
-  void set_serial_nr_text_sensor(text_sensor::TextSensor *serial_nr) { this->serial_nr_ = serial_nr; }
-  void set_state_text_sensor(text_sensor::TextSensor *state) { this->reading_state_ = state; }
+  void set_tariff_consumption_sensor(uint8_t consumption_type, uint8_t tariff, sensor::Sensor *sensor);
+  void set_phase_measurements_sensor(uint8_t phase, uint8_t measurement, sensor::Sensor *sensor);
 
   void set_flow_control_pin(GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
   void set_receive_timeout(uint32_t receive_timeout) { this->receive_timeout_ = receive_timeout; }
   void set_requested_meter_address(uint32_t address) { this->requested_meter_address_ = address; }
+  void set_password(uint32_t password) { this->password_ = password; } 
 
   float get_setup_priority() const override;
 
@@ -85,24 +80,13 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   void update() override;
 
  protected:
-  //  replace with SUB_SENSOR()
-  sensor::Sensor *active_power_{nullptr};
-  sensor::Sensor *energy_total_{nullptr};
-  sensor::Sensor *energy_t1_{nullptr};
-  sensor::Sensor *energy_t2_{nullptr};
-  sensor::Sensor *energy_t3_{nullptr};
-  sensor::Sensor *energy_t4_{nullptr};
-
-  text_sensor::TextSensor *tariff_{nullptr};
-  text_sensor::TextSensor *date_{nullptr};
-  text_sensor::TextSensor *time_{nullptr};
-  text_sensor::TextSensor *network_address_{nullptr};
-  text_sensor::TextSensor *serial_nr_{nullptr};
-  text_sensor::TextSensor *reading_state_{nullptr};
+  sensor::Sensor *tariff_consumption_[4][8] = {{nullptr}};
+  sensor::Sensor *phase_measurements_[2][4] = {{nullptr}};  // [phase][measurement]
 
   GPIOPin *flow_control_pin_{nullptr};
   uint32_t receive_timeout_{2000};
   uint32_t requested_meter_address_{0};
+  uint32_t password_{0};
 
   InternalDataState data_{};
 
@@ -113,6 +97,13 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
     uint8_t escape_seq_found{0};
     uint32_t start_time{0};
     uint16_t bytes_read{0};
+    void reset() {
+      current_cmd = EnqCmd::ConsumedEnergy;
+      expected_size = 0;
+      escape_seq_found = 0;
+      start_time = 0;
+      bytes_read = 0;
+    }
   } request_tracker_{};
 
   enum class State : uint8_t {
