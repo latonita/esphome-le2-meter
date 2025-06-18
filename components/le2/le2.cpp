@@ -37,12 +37,14 @@ enum class ComType : uint8_t { Enq = 0x01 };
 
 #pragma pack(1)
 typedef struct {
-  uint8_t magic;      // 0xAA
-  uint8_t length;     // Length of the frame, including header and CRC16
-  uint32_t address;   // Network address of the meter
-  uint32_t password;  // Password for the meter, usually 0x00000000
-  uint8_t com;        // Command type: 0x01 for enquiry, ...
-  uint8_t function;   // Request function
+  uint8_t magic;          // 0xAA
+  uint8_t length;         // Length of the frame, including header and CRC16
+  uint32_t address;       // Network address of the meter
+  uint16_t password_low;  // low 16 bits of password for the meter, usually 11111111
+  uint8_t password_high;  // high 8 bits
+  uint8_t access;         // 0x40 - read, 0x80 - write
+  uint8_t com;            // Command type: 0x01 for enquiry, ...
+  uint8_t function;       // Request function
 } le2_frame_header_t;
 
 typedef struct {
@@ -290,7 +292,9 @@ void LE2Component::send_enquiry_command(EnqCmd cmd) {
   txBuffer.header.magic = 0xAA;  // magic
   txBuffer.header.length = sizeof(le2_request_command_t) - 1;
   txBuffer.header.address = this->requested_meter_address_;
-  txBuffer.header.password = this->password_;  // 0x0;
+  txBuffer.header.password_low = this->password_ & 0xFFFF;
+  txBuffer.header.password_high = (this->password_ >> 16) & 0xFF;
+  txBuffer.header.access = 0x40;  // read access
   txBuffer.header.com = static_cast<uint8_t>(ComType::Enq);
   txBuffer.header.function = static_cast<uint8_t>(cmd);
 
