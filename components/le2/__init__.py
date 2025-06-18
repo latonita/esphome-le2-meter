@@ -29,7 +29,7 @@ CONFIG_SCHEMA = cv.All(
             cv.GenerateID(): cv.declare_id(LE2Component),
             cv.Optional(CONF_FLOW_CONTROL_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_ADDRESS, default=0): cv.int_range (min=0x0, max=0xffffffff),
-            cv.Optional(CONF_PASSWORD, default=0): cv.int_range (min=0x0, max=0xffffffff),
+            cv.Optional(CONF_PASSWORD, default=1084852935): cv.int_range (min=0x0, max=0xffffffff), #  111111
             cv.Optional(CONF_RECEIVE_TIMEOUT, default="500ms"): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_UPDATE_INTERVAL, default="30s"): cv.update_interval,
         }

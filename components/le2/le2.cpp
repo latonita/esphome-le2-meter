@@ -23,6 +23,7 @@ static const char *TAG = "LE2";
 static const uint8_t MAGIC = 0xAA;
 static const uint8_t ESC_START = 0x55;
 static const uint8_t ESC_AA = 0x01;
+static const uint8_t ESC_55 = 0x02;
 
 // // avoid communications until properly booted
 // static constexpr uint8_t bootupWaitUpdate = 10;
@@ -207,6 +208,9 @@ void LE2Component::loop() {
         if (this->reading_state_text_sensor_ != nullptr && !this->data_.initialized) {
           this->reading_state_text_sensor_->publish_state(STATE_METER_FOUND);
         }
+        if (this->about_text_sensor_ != nullptr) {
+          this->about_text_sensor_->publish_state(this->data_.meterInfo.about_str);
+        }
       } else {
         if (this->reading_state_text_sensor_ != nullptr && !this->data_.initialized) {
           this->reading_state_text_sensor_->publish_state(STATE_METER_NOT_FOUND);
@@ -325,7 +329,7 @@ bool LE2Component::process_response() {
 
   // Check timeout
   if (now - tracker.start_time > this->receive_timeout_) {
-    ESP_LOGE(TAG, "Response timeout read=%d, exp=%d", tracker.bytes_read, tracker.expected_size);
+    ESP_LOGE(TAG, "Response timeout, most likely password is wrong or meter is not responding");
     this->data_.readErrors++;
     if (tracker.bytes_read > 0) {
       ESP_LOGVV(TAG, "RX: %s",
@@ -364,6 +368,7 @@ bool LE2Component::process_response() {
   if (tracker.escape_seq_found > 0) {
     ESP_LOGD(TAG, "Found %d escape sequences", tracker.escape_seq_found);
     // Process escape sequences ESC_START+ESC_AA => MAGIC
+    //
 
     // Input example  : AA 01 02 55 01 04 05
     // Output example : AA 01 02 AA 04 05
@@ -375,12 +380,21 @@ bool LE2Component::process_response() {
     while (data_ptr < end_ptr) {
       if (*data_ptr == ESC_START) {
         // Found escape sequence, replace with MAGIC.
-        *write_ptr++ = MAGIC;
+        *write_ptr = ESC_START;
         data_ptr++;
-        if (data_ptr < end_ptr) {  // && *data_ptr == ESC_AA) { // only one sequence exist
+        if (data_ptr < end_ptr) {
+          if (*data_ptr == ESC_AA) {
+            *write_ptr = MAGIC;
+          } else if (*data_ptr == ESC_55) {
+            *write_ptr = ESC_START;  // keep the escape sequence as is
+          } else {
+            ESP_LOGE(TAG, "Unexpected escape sequence: 0x%02X", *data_ptr);
+            // return false; // Invalid escape sequence
+          }
           // Skip the next byte (ESC_AA)
           data_ptr++;
         }
+        *write_ptr++;
       } else {
         // Copy the byte as is
         *write_ptr++ = *data_ptr++;
@@ -452,6 +466,9 @@ bool LE2Component::process_received_data() {
       time_t d = res.production_date;
       strftime(this->data_.meterInfo.production_date_str, sizeof(this->data_.meterInfo.production_date_str), "%Y-%m-%d",
                localtime(&d));
+      snprintf(this->data_.meterInfo.about_str, sizeof(this->data_.meterInfo.about_str),
+               "Typ: %u, HW: %u, FW: %u, Prod: %s", res.type, res.hw_ver, res.fw_ver,
+               this->data_.meterInfo.production_date_str);
 
       ESP_LOGI(TAG,
                "Got reply from meter with s/n %u (0x%08X), network address %u, "

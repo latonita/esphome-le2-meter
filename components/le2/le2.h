@@ -36,6 +36,8 @@ struct InternalDataState {
     uint8_t hw_version{0};
     uint8_t fw_version{0};
     uint64_t error_code{0};
+
+    char about_str[64]{0};  // "Type: 1, HW: 1, FW: 1, Date: 2025-01-28"
   } meterInfo;
 
   uint32_t properReads{0};
@@ -66,6 +68,7 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   SUB_TEXT_SENSOR(serial_nr)
   SUB_TEXT_SENSOR(reading_state)
   SUB_TEXT_SENSOR(error_code)
+  SUB_TEXT_SENSOR(about)
 #endif
 
  public:
