@@ -297,6 +297,8 @@ void LE2Component::send_enquiry_command(EnqCmd cmd) {
   // minus 2 bytes for CRC minus 1 for frame separator byte (0xAA)
   txBuffer.crc16 = crc_16_iec((const uint8_t *) &txBuffer + 1, sizeof(le2_request_command_t) - 3);
 
+  // todo: SLIP encode! AA -> 55 01, 55 -> 55 02
+
   write_array((const uint8_t *) &txBuffer, sizeof(le2_request_command_t));
   flush();
 
@@ -429,7 +431,7 @@ bool LE2Component::process_received_data() {
     case EnqCmd::ConsumedEnergy: {
       le2_response_consumed_energy_t &res = *(le2_response_consumed_energy_t *) rxBuffer.data();
       this->data_.energy.currentTariff = res.currentTariff + 1;
-      ESP_LOGI(TAG, "Cur tariff: T%d, T1 A+ =%f, T2 A+=%f", res.currentTariff, res.consumption[0][0],
+      ESP_LOGI(TAG, "Cur tariff: T%d, T1 A+ =%f, T2 A+=%f", res.currentTariff + 1, res.consumption[0][0],
                res.consumption[0][1]);
       memcpy(this->data_.energy.consumption, res.consumption, sizeof(res.consumption));
       this->data_.got |= MASK_GOT_CONSUMPTION;
