@@ -27,8 +27,16 @@ struct InternalDataState {
 
   char dateTimeStr[25]{0};  // "30/08/2023 23:59:59"
 
-  uint32_t serialNumber{0};
-  uint32_t networkAddress{0};
+  struct {
+    uint32_t production_date{0};
+    char production_date_str[11]{0};  // "30/08/2023"
+    uint32_t serial_number{0};
+    uint32_t network_address{0};
+    uint8_t type{0};
+    uint8_t hw_version{0};
+    uint8_t fw_version{0};
+    uint64_t errors{0};
+  } meterInfo;
 
   uint32_t properReads{0};
   uint32_t readErrors{0};
@@ -57,11 +65,11 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   SUB_TEXT_SENSOR(network_address)
   SUB_TEXT_SENSOR(serial_nr)
   SUB_TEXT_SENSOR(reading_state)
+  SUB_TEXT_SENSOR(errors)
 #endif
 
  public:
   LE2Component() = default;
-
 
   void set_tariff_consumption_sensor(uint8_t consumption_type, uint8_t tariff, sensor::Sensor *sensor);
   void set_phase_measurements_sensor(uint8_t phase, uint8_t measurement, sensor::Sensor *sensor);
@@ -69,7 +77,7 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   void set_flow_control_pin(GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
   void set_receive_timeout(uint32_t receive_timeout) { this->receive_timeout_ = receive_timeout; }
   void set_requested_meter_address(uint32_t address) { this->requested_meter_address_ = address; }
-  void set_password(uint32_t password) { this->password_ = password; } 
+  void set_password(uint32_t password) { this->password_ = password; }
 
   float get_setup_priority() const override;
 

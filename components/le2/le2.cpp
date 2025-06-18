@@ -196,10 +196,13 @@ void LE2Component::loop() {
 
       if (this->data_.meterFound) {
         if (this->network_address_text_sensor_ != nullptr) {
-          this->network_address_text_sensor_->publish_state(to_string(this->data_.networkAddress));
+          this->network_address_text_sensor_->publish_state(to_string(this->data_.meterInfo.network_address));
         }
         if (this->serial_nr_text_sensor_ != nullptr) {
-          this->serial_nr_text_sensor_->publish_state(to_string(this->data_.serialNumber));
+          this->serial_nr_text_sensor_->publish_state(to_string(this->data_.meterInfo.serial_number));
+        }
+        if (this->errors_text_sensor_ != nullptr) {
+          this->errors_text_sensor_->publish_state(to_string(this->data_.meterInfo.errors));
         }
         if (this->reading_state_text_sensor_ != nullptr && !this->data_.initialized) {
           this->reading_state_text_sensor_->publish_state(STATE_METER_FOUND);
@@ -273,11 +276,7 @@ void LE2Component::update() {
   ESP_LOGV(TAG, "Update: Initiating new data collection");
   this->data_.got = 0;
   this->request_tracker_.reset();
-  if (!this->data_.meterFound) {
-    this->state_ = State::GET_METER_INFO;
-  } else {
-    this->state_ = State::GET_GRID_PARAMETERS;
-  }
+  this->state_ = State::GET_METER_INFO;
 }
 
 void LE2Component::send_enquiry_command(EnqCmd cmd) {
@@ -328,6 +327,10 @@ bool LE2Component::process_response() {
   if (now - tracker.start_time > this->receive_timeout_) {
     ESP_LOGE(TAG, "Response timeout");
     this->data_.readErrors++;
+    if (tracker.bytes_read > 0) {
+      ESP_LOGVV(TAG, "RX: %s",
+                format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read).c_str());
+    }
     // Return to main FSM with failure
     this->state_ = this->next_state_;
     return false;
@@ -438,17 +441,27 @@ bool LE2Component::process_received_data() {
 
     case EnqCmd::MeterInfo: {
       le2_response_meter_info_t &res = *(le2_response_meter_info_t *) rxBuffer.data();
-      this->data_.serialNumber = res.serial_number;
-      this->data_.networkAddress = res.network_address;
+      this->data_.meterInfo.production_date = res.production_date;
+      this->data_.meterInfo.serial_number = res.serial_number;
+      this->data_.meterInfo.network_address = res.network_address;
+      this->data_.meterInfo.type = res.type;
+      this->data_.meterInfo.fw_version = res.fw_ver;
+      this->data_.meterInfo.hw_version = res.hw_ver;
+      this->data_.meterInfo.errors = res.error;
+
+      time_t d = res.production_date;
+      strftime(this->data_.meterInfo.production_date_str, sizeof(this->data_.meterInfo.production_date_str), "%Y-%m-%d",
+               localtime(&d));
 
       ESP_LOGI(TAG,
                "Got reply from meter with s/n %u (0x%08X), network address %u, "
-               "fw ver. %04X",
-               res.serial_number, res.serial_number, res.network_address, res.fw_ver);
+               "fw ver. %02X hw ver. %02X, type %02X, errors %llu, production date %s",
+               res.serial_number, res.serial_number, res.network_address, res.fw_ver, res.hw_ver, res.type, res.error,
+               this->data_.meterInfo.production_date_str);
 
       if (!this->data_.meterFound) {
         this->data_.meterFound = true;
-        requested_meter_address_ = this->data_.networkAddress;
+        requested_meter_address_ = this->data_.meterInfo.network_address;
       }
       this->data_.got |= MASK_GOT_METER_INFO;
       break;

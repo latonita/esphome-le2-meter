@@ -7,6 +7,7 @@ from esphome.const import (
     CONF_DATE,
     CONF_TIME,
     CONF_DATETIME,
+    CONF_NAME,
 )
 
 from . import LE2Component, CONF_LE2_ID
@@ -19,7 +20,7 @@ CONF_ELECTRO_TARIFF = "electricity_tariff"
 CONF_NETWORK_ADDRESS = "network_address"
 CONF_SERIAL_NR = "serial_nr"
 CONF_READING_STATE = "reading_state"
-
+CONF_ERRORS = "errors"
 
 TEXT_SENSORS = [
     CONF_ELECTRO_TARIFF,
@@ -29,29 +30,57 @@ TEXT_SENSORS = [
     CONF_NETWORK_ADDRESS,
     CONF_SERIAL_NR,
     CONF_READING_STATE,
+    CONF_ERRORS,
 ]
 
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_LE2_ID): cv.use_id(LE2Component),
-        cv.Optional(CONF_ELECTRO_TARIFF): text_sensor.text_sensor_schema(),
-        cv.Optional(CONF_DATE): text_sensor.text_sensor_schema(
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        cv.Optional(CONF_ELECTRO_TARIFF): cv.maybe_simple_value(
+            text_sensor.text_sensor_schema(),
+            key=CONF_NAME,
         ),
-        cv.Optional(CONF_TIME): text_sensor.text_sensor_schema(
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        cv.Optional(CONF_DATE): cv.maybe_simple_value(
+            text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            key=CONF_NAME,
         ),
-        cv.Optional(CONF_DATETIME): text_sensor.text_sensor_schema(
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        cv.Optional(CONF_TIME): cv.maybe_simple_value(
+            text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            key=CONF_NAME,
         ),
-        cv.Optional(CONF_NETWORK_ADDRESS): text_sensor.text_sensor_schema(
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        cv.Optional(CONF_DATETIME): cv.maybe_simple_value(
+            text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            key=CONF_NAME,
         ),
-        cv.Optional(CONF_SERIAL_NR): text_sensor.text_sensor_schema(
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        cv.Optional(CONF_NETWORK_ADDRESS): cv.maybe_simple_value(
+            text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            key=CONF_NAME,
         ),
-        cv.Optional(CONF_READING_STATE): text_sensor.text_sensor_schema(
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        cv.Optional(CONF_SERIAL_NR): cv.maybe_simple_value(
+            text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            key=CONF_NAME,
+        ),
+        cv.Optional(CONF_READING_STATE): cv.maybe_simple_value(
+            text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            key=CONF_NAME,
+        ),
+        cv.Optional(CONF_ERRORS): cv.maybe_simple_value(
+            text_sensor.text_sensor_schema(
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            key=CONF_NAME,
         ),
     }
 )
