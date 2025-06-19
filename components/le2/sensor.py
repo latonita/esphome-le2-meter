@@ -4,6 +4,7 @@ from esphome.components import sensor
 from esphome.const import (
     CONF_ACTIVE_POWER,
     CONF_CURRENT,
+    CONF_APPARENT_POWER,
     CONF_EXPORT_ACTIVE_ENERGY,
     CONF_EXPORT_REACTIVE_ENERGY,
     CONF_FREQUENCY,    
@@ -19,6 +20,7 @@ from esphome.const import (
     DEVICE_CLASS_POWER_FACTOR,
     DEVICE_CLASS_POWER,
     ICON_CURRENT_AC,
+    ICON_POWER,
     STATE_CLASS_MEASUREMENT,
     STATE_CLASS_TOTAL_INCREASING,
     UNIT_AMPERE,
@@ -28,6 +30,7 @@ from esphome.const import (
     UNIT_VOLT,
     UNIT_WATT_HOURS,
     UNIT_WATT,
+    UNIT_VOLT_AMPS,
 )
 from . import LE2Component, CONF_LE2_ID
 
@@ -129,6 +132,15 @@ PHASE_SENSORS = {
             unit_of_measurement="",
             accuracy_decimals=3,
             device_class=DEVICE_CLASS_POWER_FACTOR,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        key=CONF_NAME,
+    ),
+    cv.Optional(CONF_APPARENT_POWER): cv.maybe_simple_value(
+        sensor.sensor_schema(
+            unit_of_measurement=UNIT_VOLT_AMPS,
+            accuracy_decimals=3,
+            icon=ICON_VOLTAGE,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         key=CONF_NAME,

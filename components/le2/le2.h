@@ -8,24 +8,44 @@
 namespace esphome {
 namespace le2 {
 
+enum PHASE : size_t {
+  LINE = 0,     // Phase A
+  NEUTRAL = 1,  // Phase R
+};
+
+enum MEAS : size_t {
+  I = 0,        // Current
+  P_A = 1,      // Active Power Phase A
+  P_R = 2,      // Active Power Phase R
+  COS_PHI = 3,  // Power Factor
+  S = 4,        // Apparent Power
+};
+
+constexpr size_t PHASE_COUNT = 2;
+constexpr size_t MEAS_COUNT = 4;
+constexpr size_t MEAS_COUNT_EXTENDED = 5;     // Extended to include apparent power
+constexpr size_t CONSUMPTION_TYPE_COUNT = 4;  // A+, A-, R+, R-
+constexpr size_t TARIFF_COUNT = 8;            // Number of tariffs
+
 struct InternalDataState {
   struct Readings {
-    uint8_t currentTariff;
-    float consumption[4][8];  // [consumption_type][tariff] for A+, A-, R+, R- (0-3)
+    uint8_t current_tariff;
+    float consumption[CONSUMPTION_TYPE_COUNT][TARIFF_COUNT];  // [consumption_type][tariff] for A+, A-, R+, R- (0-3)
   } energy;
 
   // grid parameters
   struct GridParameters {
     uint32_t dtm;
     float u;
-    float measurements[2][4];  // [phase][measurement]
+    float measurements[PHASE_COUNT][MEAS_COUNT_EXTENDED];  // [phase][measurement+1]: [phase,neutral][I, P_A, P_R,
+                                                           // cos_phi, + apparent power]
     float freq;
   } grid;
 
-  char timeStr[9]{0};   // "23:59:99"
-  char dateStr[11]{0};  // "30/08/2023"
+  char time_str[9]{0};   // "23:59:99"
+  char date_str[11]{0};  // "30/08/2023"
 
-  char dateTimeStr[25]{0};  // "30/08/2023 23:59:59"
+  char datetime_str[25]{0};  // "30/08/2023 23:59:59"
 
   struct {
     uint32_t production_date{0};
@@ -38,15 +58,15 @@ struct InternalDataState {
     uint64_t error_code{0};
 
     char about_str[64]{0};  // "Type: 1, HW: 1, FW: 1, Date: 2025-01-28"
-  } meterInfo;
+  } meter_info;
 
-  uint32_t properReads{0};
-  uint32_t readErrors{0};
-  bool meterFound{false};
+  uint32_t proper_reads{0};
+  uint32_t read_errors{0};
+  bool meter_found{false};
   bool initialized{false};
   bool failure{false};
   uint8_t got{0};
-  uint32_t lastGoodRead_ms{0};
+  uint32_t last_good_read_ms{0};
 };
 
 enum class EnqCmd : uint8_t {
@@ -92,7 +112,7 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
 
  protected:
   sensor::Sensor *tariff_consumption_[4][8] = {{nullptr}};
-  sensor::Sensor *phase_measurements_[2][4] = {{nullptr}};  // [phase][measurement]
+  sensor::Sensor *phase_measurements_[2][5] = {{nullptr}};
 
   GPIOPin *flow_control_pin_{nullptr};
   uint32_t receive_timeout_{2000};
@@ -134,11 +154,13 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   void start_async_request(EnqCmd cmd, uint16_t expected_size, State next_state);
   bool process_response();
   bool process_received_data();
-
-  uint16_t crc_16_iec(const uint8_t *buffer, uint16_t len);
-
+  
   const char *state_to_string(State state);
   void log_state_(State *next_state = nullptr);
+
+  uint16_t crc_16_iec(const uint8_t *buffer, uint16_t len);
+  size_t slip_encode(uint8_t *data_out, const uint8_t *data_in, size_t size_in);
+  size_t slip_decode_inplace(uint8_t *data, size_t size_in);
 };
 
 }  // namespace le2

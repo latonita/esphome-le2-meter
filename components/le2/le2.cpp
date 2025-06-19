@@ -20,17 +20,14 @@ namespace le2 {
 
 static const char *TAG = "LE2";
 
+static constexpr uint32_t NO_GOOD_READS_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
+enum class ComType : uint8_t { Enq = 0x01 };
+
 static const uint8_t MAGIC = 0xAA;
 static const uint8_t ESC_START = 0x55;
 static const uint8_t ESC_AA = 0x01;
 static const uint8_t ESC_55 = 0x02;
 
-// // avoid communications until properly booted
-// static constexpr uint8_t bootupWaitUpdate = 10;
-
-static constexpr uint32_t NO_GOOD_READS_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
-
-enum class ComType : uint8_t { Enq = 0x01 };
 
 #pragma pack(1)
 typedef struct {
@@ -65,8 +62,8 @@ typedef struct {
 
 typedef struct {
   le2_frame_header_t header;
-  uint8_t currentTariff;
-  float consumption[4][8];  // [consumption_type][tariff] for A+, A-, R+, R- (0-3)
+  uint8_t current_tariff;
+  float consumption[CONSUMPTION_TYPE_COUNT][TARIFF_COUNT];  // [consumption_type][tariff] for A+, A-, R+, R- (0-3)
   uint16_t crc16;
 } le2_response_consumed_energy_t;
 
@@ -74,15 +71,17 @@ typedef struct {
   le2_frame_header_t header;
   uint32_t dtm;
   float u;
-  float measurements[2][4];  // [phase][measurement]:  [phase,neutral][I, P_A, P_R, cos_phi]
+  float measurements[PHASE_COUNT][MEAS_COUNT];  // [phase][measurement]:  [phase,neutral][I, P_A, P_R, cos_phi]
   float freq;
   uint16_t crc16;
 } le2_response_grid_parameters_t;
 
 #pragma pack(0)
 
+// TX RX Buffers
+
 static le2_request_command_t txCmd;
-static uint8_t txBufferFrame[sizeof(le2_request_command_t) * 2 + 1];
+static uint8_t txBufferFrame[sizeof(le2_request_command_t) * 2 + 1];  // SLIP encoded frame buffer
 
 static constexpr size_t RX_BUFFER_SIZE = 256u;
 static std::array<uint8_t, RX_BUFFER_SIZE> rxBuffer;
@@ -109,11 +108,11 @@ void LE2Component::dump_config() {
   // LOG_TEXT_SENSOR("  ", "Network address", this->network_address_);
   // LOG_TEXT_SENSOR("  ", "Serial number", this->serial_nr_);
   //  this->check_uart_settings(9600, 1, uart::UART_CONFIG_PARITY_EVEN, 8);
-  ESP_LOGCONFIG(TAG, "Data errors %d, proper reads %d", this->data_.readErrors, this->data_.properReads);
+  ESP_LOGCONFIG(TAG, "Data errors %d, proper reads %d", this->data_.read_errors, this->data_.proper_reads);
 }
 
 void LE2Component::set_tariff_consumption_sensor(uint8_t consumption_type, uint8_t tariff, sensor::Sensor *sensor) {
-  if (consumption_type > 3 || tariff > 7) {
+  if (consumption_type >= CONSUMPTION_TYPE_COUNT || tariff >= TARIFF_COUNT) {
     ESP_LOGE(TAG, "Invalid consumption type %d or tariff %d", consumption_type, tariff);
     return;
   }
@@ -121,7 +120,7 @@ void LE2Component::set_tariff_consumption_sensor(uint8_t consumption_type, uint8
 }
 
 void LE2Component::set_phase_measurements_sensor(uint8_t phase, uint8_t measurement, sensor::Sensor *sensor) {
-  if (phase > 1 || measurement > 3) {
+  if (phase >= PHASE_COUNT || measurement >= MEAS_COUNT_EXTENDED) {
     ESP_LOGE(TAG, "Invalid phase %d or measurement %d", phase, measurement);
     return;
   }
@@ -148,9 +147,10 @@ void LE2Component::loop() {
     case State::IDLE: {
       this->log_state_();
       uint32_t now = millis();
-      if (now - this->data_.lastGoodRead_ms > NO_GOOD_READS_TIMEOUT_MS) {
+      if (now - this->data_.last_good_read_ms > NO_GOOD_READS_TIMEOUT_MS) {
         ESP_LOGE(TAG, "Rebooting due to no good reads from the meter for 5 minutes...");
         delay(1000);
+        yield();  // Give time to log the message
         App.reboot();
       }
     } break;
@@ -194,24 +194,24 @@ void LE2Component::loop() {
       //   }
       // }
       if (this->data_.got) {
-        this->data_.lastGoodRead_ms = millis();
+        this->data_.last_good_read_ms = millis();
       }
 
-      if (this->data_.meterFound) {
+      if (this->data_.meter_found) {
         if (this->network_address_text_sensor_ != nullptr) {
-          this->network_address_text_sensor_->publish_state(to_string(this->data_.meterInfo.network_address));
+          this->network_address_text_sensor_->publish_state(to_string(this->data_.meter_info.network_address));
         }
         if (this->serial_nr_text_sensor_ != nullptr) {
-          this->serial_nr_text_sensor_->publish_state(to_string(this->data_.meterInfo.serial_number));
+          this->serial_nr_text_sensor_->publish_state(to_string(this->data_.meter_info.serial_number));
         }
         if (this->error_code_text_sensor_ != nullptr) {
-          this->error_code_text_sensor_->publish_state(to_string(this->data_.meterInfo.error_code));
+          this->error_code_text_sensor_->publish_state(to_string(this->data_.meter_info.error_code));
         }
         if (this->reading_state_text_sensor_ != nullptr && !this->data_.initialized) {
           this->reading_state_text_sensor_->publish_state(STATE_METER_FOUND);
         }
         if (this->about_text_sensor_ != nullptr) {
-          this->about_text_sensor_->publish_state(this->data_.meterInfo.about_str);
+          this->about_text_sensor_->publish_state(this->data_.meter_info.about_str);
         }
       } else {
         if (this->reading_state_text_sensor_ != nullptr && !this->data_.initialized) {
@@ -220,8 +220,8 @@ void LE2Component::loop() {
       }
 
       if (this->data_.got & MASK_GOT_CONSUMPTION) {
-        for (uint8_t consumption_type = 0; consumption_type < 4; ++consumption_type) {
-          for (uint8_t tariff = 0; tariff < 8; ++tariff) {
+        for (uint8_t consumption_type = 0; consumption_type < CONSUMPTION_TYPE_COUNT; ++consumption_type) {
+          for (uint8_t tariff = 0; tariff < TARIFF_COUNT; ++tariff) {
             if (this->tariff_consumption_[consumption_type][tariff] != nullptr) {
               this->tariff_consumption_[consumption_type][tariff]->publish_state(
                   this->data_.energy.consumption[consumption_type][tariff]);
@@ -231,19 +231,19 @@ void LE2Component::loop() {
         if (this->electricity_tariff_text_sensor_ != nullptr) {
           char tariff_str[3];
           tariff_str[0] = 'T';
-          tariff_str[1] = '0' + (this->data_.energy.currentTariff & 0b111);
+          tariff_str[1] = '0' + (this->data_.energy.current_tariff & 0b111);
           tariff_str[2] = 0;
           this->electricity_tariff_text_sensor_->publish_state(tariff_str);
         }
 
         if (this->date_text_sensor_ != nullptr) {
-          this->date_text_sensor_->publish_state(this->data_.dateStr);
+          this->date_text_sensor_->publish_state(this->data_.date_str);
         }
         if (this->time_text_sensor_ != nullptr) {
-          this->time_text_sensor_->publish_state(this->data_.timeStr);
+          this->time_text_sensor_->publish_state(this->data_.time_str);
         }
         if (this->datetime_text_sensor_ != nullptr) {
-          this->datetime_text_sensor_->publish_state(this->data_.dateTimeStr);
+          this->datetime_text_sensor_->publish_state(this->data_.datetime_str);
         }
       }
 
@@ -255,8 +255,8 @@ void LE2Component::loop() {
           this->voltage_sensor_->publish_state(this->data_.grid.u);
         }
 
-        for (uint8_t phase = 0; phase < 2; ++phase) {
-          for (uint8_t measurement = 0; measurement < 4; ++measurement) {
+        for (uint8_t phase = 0; phase < PHASE_COUNT; ++phase) {
+          for (uint8_t measurement = 0; measurement < MEAS_COUNT_EXTENDED; ++measurement) {
             if (this->phase_measurements_[phase][measurement] != nullptr) {
               this->phase_measurements_[phase][measurement]->publish_state(
                   this->data_.grid.measurements[phase][measurement]);
@@ -265,7 +265,7 @@ void LE2Component::loop() {
         }
       }
 
-      ESP_LOGD(TAG, "Data errors %d, proper reads %d", this->data_.readErrors, this->data_.properReads);
+      ESP_LOGD(TAG, "Data errors %d, proper reads %d", this->data_.read_errors, this->data_.proper_reads);
       this->state_ = State::IDLE;
     } break;
 
@@ -283,56 +283,6 @@ void LE2Component::update() {
   this->data_.got = 0;
   this->request_tracker_.reset();
   this->state_ = State::GET_METER_INFO;
-}
-
-size_t slip_encode(uint8_t *data_out, const uint8_t *data_in, size_t size_in) {
-  size_t size_out = 0;
-  data_out[size_out++] = MAGIC;  // Start with the frame separator byte
-  for (size_t i = 0; i < size_in; ++i) {
-    switch (data_in[i]) {
-      case ESC_START:
-        data_out[size_out++] = ESC_START;
-        data_out[size_out++] = ESC_55;  // Escape sequence for ESC_START
-        break;
-      case MAGIC:
-        data_out[size_out++] = ESC_START;
-        data_out[size_out++] = ESC_AA;  // Escape sequence for MAGIC
-        break;
-      default:
-        data_out[size_out++] = data_in[i];  // Normal byte, just copy it
-        break;
-    }
-  }
-  return size_out;  // Return the size of the encoded data
-}
-
-size_t slip_decode_inplace(uint8_t *data, size_t size_in) {
-  size_t write_index = 0;
-  if (size_in == 0) {
-    return 0;  // Nothing to decode
-  }
-  if (data[0] != MAGIC) {
-    ESP_LOGE(TAG, "Invalid frame start byte: 0x%02X", data[0]);
-    return 0;  // Invalid frame start
-  }
-  for (size_t read_index = 1; read_index < size_in; ++read_index) {
-    if (data[read_index] == ESC_START) {
-      read_index++;
-      if (read_index < size_in) {
-        if (data[read_index] == ESC_AA) {
-          data[write_index++] = MAGIC;
-        } else if (data[read_index] == ESC_55) {
-          data[write_index++] = ESC_START;
-        } else {
-          ESP_LOGE(TAG, "Invalid escape sequence: 0x%02X", data[read_index]);
-          return 0;  // Invalid escape sequence
-        }
-      }
-    } else {
-      data[write_index++] = data[read_index];
-    }
-  }
-  return write_index;  // Update size to the new length
 }
 
 void LE2Component::send_enquiry_command(EnqCmd cmd) {
@@ -380,7 +330,7 @@ bool LE2Component::process_response() {
   // Check timeout
   if (now - tracker.start_time > this->receive_timeout_) {
     ESP_LOGE(TAG, "Response timeout, most likely password is wrong or meter is not responding");
-    this->data_.readErrors++;
+    this->data_.read_errors++;
     if (tracker.bytes_read > 0) {
       ESP_LOGVV(TAG, "RX: %s",
                 format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read).c_str());
@@ -416,7 +366,7 @@ bool LE2Component::process_response() {
   size_t decoded_size = slip_decode_inplace(rxBuffer.data(), tracker.bytes_read);
   if (decoded_size == 0) {
     ESP_LOGE(TAG, "Received SLIP packed corrupted");
-    this->data_.readErrors++;
+    this->data_.read_errors++;
     this->state_ = this->next_state_;
     return false;
   }
@@ -424,13 +374,13 @@ bool LE2Component::process_response() {
   // CRC of message + its CRC = 0x0F47
   if (crc_16_iec(rxBuffer.data(), decoded_size) != MESSAGE_CRC_IEC) {
     ESP_LOGE(TAG, "CRC check failed");
-    this->data_.readErrors++;
+    this->data_.read_errors++;
     this->state_ = this->next_state_;
     return false;
   }
 
   // Process the received data
-  this->data_.properReads++;
+  this->data_.proper_reads++;
   bool result = process_received_data();
 
   // Return to main FSM with success/failure flag
@@ -444,8 +394,8 @@ bool LE2Component::process_received_data() {
   switch (this->request_tracker_.current_cmd) {
     case EnqCmd::ConsumedEnergy: {
       le2_response_consumed_energy_t &res = *(le2_response_consumed_energy_t *) rxBuffer.data();
-      this->data_.energy.currentTariff = res.currentTariff + 1;
-      ESP_LOGI(TAG, "Cur tariff: T%d, T1 A+ =%f, T2 A+=%f", res.currentTariff + 1, res.consumption[0][0],
+      this->data_.energy.current_tariff = res.current_tariff + 1;
+      ESP_LOGI(TAG, "Cur tariff: T%d, T1 A+ =%f, T2 A+=%f", res.current_tariff + 1, res.consumption[0][0],
                res.consumption[0][1]);
       memcpy(this->data_.energy.consumption, res.consumption, sizeof(res.consumption));
       this->data_.got |= MASK_GOT_CONSUMPTION;
@@ -458,43 +408,61 @@ bool LE2Component::process_received_data() {
       this->data_.grid.dtm = grid.dtm;
       this->data_.grid.u = grid.u;
       this->data_.grid.freq = grid.freq;
-      memcpy(this->data_.grid.measurements, grid.measurements, sizeof(grid.measurements));
-      time_t t = grid.dtm;
-      strftime(this->data_.dateTimeStr, sizeof(this->data_.dateTimeStr), "%Y-%m-%d %H:%M:%S", localtime(&t));
-      strftime(this->data_.dateStr, sizeof(this->data_.dateStr), "%Y-%m-%d", localtime(&t));
-      strftime(this->data_.timeStr, sizeof(this->data_.timeStr), "%H:%M:%S", localtime(&t));
 
-      ESP_LOGI(TAG, "Dtm = %s, U = %f, F = %f", this->data_.dateTimeStr, this->data_.grid.u, this->data_.grid.freq);
+      memcpy(this->data_.grid.measurements[PHASE::LINE], grid.measurements[PHASE::LINE],
+             sizeof(grid.measurements[PHASE::LINE]));
+      memcpy(this->data_.grid.measurements[PHASE::NEUTRAL], grid.measurements[PHASE::NEUTRAL],
+             sizeof(grid.measurements[PHASE::NEUTRAL]));
+
+      // Calculate apparent power for each phase
+      this->data_.grid.measurements[PHASE::LINE][MEAS::S] =
+          sqrtf(this->data_.grid.measurements[PHASE::LINE][MEAS::P_A] *
+                    this->data_.grid.measurements[PHASE::LINE][MEAS::P_A] +
+                this->data_.grid.measurements[PHASE::LINE][MEAS::P_R] *
+                    this->data_.grid.measurements[PHASE::LINE][MEAS::P_R]);
+
+      this->data_.grid.measurements[PHASE::NEUTRAL][MEAS::S] =
+          sqrtf(this->data_.grid.measurements[PHASE::NEUTRAL][MEAS::P_A] *
+                    this->data_.grid.measurements[PHASE::NEUTRAL][MEAS::P_A] +
+                this->data_.grid.measurements[PHASE::NEUTRAL][MEAS::P_R] *
+                    this->data_.grid.measurements[PHASE::NEUTRAL][MEAS::P_R]);
+
+      time_t t = grid.dtm;
+      strftime(this->data_.datetime_str, sizeof(this->data_.datetime_str), "%Y-%m-%d %H:%M:%S", localtime(&t));
+      strftime(this->data_.date_str, sizeof(this->data_.date_str), "%Y-%m-%d", localtime(&t));
+      strftime(this->data_.time_str, sizeof(this->data_.time_str), "%H:%M:%S", localtime(&t));
+
+      ESP_LOGI(TAG, "Dtm = %s, U = %f, F = %f", this->data_.datetime_str, this->data_.grid.u, this->data_.grid.freq);
 
       this->data_.got |= MASK_GOT_GRID_DATA;
     } break;
 
     case EnqCmd::MeterInfo: {
       le2_response_meter_info_t &res = *(le2_response_meter_info_t *) rxBuffer.data();
-      this->data_.meterInfo.production_date = res.production_date;
-      this->data_.meterInfo.serial_number = res.serial_number;
-      this->data_.meterInfo.network_address = res.network_address;
-      this->data_.meterInfo.type = res.type;
-      this->data_.meterInfo.fw_version = res.fw_ver;
-      this->data_.meterInfo.hw_version = res.hw_ver;
-      this->data_.meterInfo.error_code = res.error;
+      this->data_.meter_info.production_date = res.production_date;
+      this->data_.meter_info.serial_number = res.serial_number;
+      this->data_.meter_info.network_address = res.network_address;
+      this->data_.meter_info.type = res.type;
+      this->data_.meter_info.fw_version = res.fw_ver;
+      this->data_.meter_info.hw_version = res.hw_ver;
+      this->data_.meter_info.error_code = res.error;
 
       time_t d = res.production_date;
-      strftime(this->data_.meterInfo.production_date_str, sizeof(this->data_.meterInfo.production_date_str), "%Y-%m-%d",
+      strftime(this->data_.meter_info.production_date_str, sizeof(this->data_.meter_info.production_date_str), "%Y-%m-%d",
                localtime(&d));
-      snprintf(this->data_.meterInfo.about_str, sizeof(this->data_.meterInfo.about_str),
+      snprintf(this->data_.meter_info.about_str, sizeof(this->data_.meter_info.about_str),
                "Typ: %u, HW: %u, FW: %u, Prod: %s", res.type, res.hw_ver, res.fw_ver,
-               this->data_.meterInfo.production_date_str);
+               this->data_.meter_info.production_date_str);
 
       ESP_LOGI(TAG,
                "Got reply from meter with s/n %u (0x%08X), network address %u, "
                "fw ver. %02X hw ver. %02X, type %02X, production date %s, error code %llu",
                res.serial_number, res.serial_number, res.network_address, res.fw_ver, res.hw_ver, res.type,
-               this->data_.meterInfo.production_date_str, res.error);
+               this->data_.meter_info.production_date_str, res.error);
 
-      if (!this->data_.meterFound) {
-        this->data_.meterFound = true;
-        requested_meter_address_ = this->data_.meterInfo.network_address;
+      if (!this->data_.meter_found) {
+        this->data_.meter_found = true;
+        requested_meter_address_ = this->data_.meter_info.network_address;
       }
       this->data_.got |= MASK_GOT_METER_INFO;
       break;
@@ -556,6 +524,58 @@ uint16_t LE2Component::crc_16_iec(const uint8_t *buffer, uint16_t len) {
   crc ^= 0xFFFF;
   return crc;
 }
+
+size_t LE2Component::slip_encode(uint8_t *data_out, const uint8_t *data_in, size_t size_in) {
+  size_t size_out = 0;
+  data_out[size_out++] = MAGIC;
+  for (size_t i = 0; i < size_in; ++i) {
+    switch (data_in[i]) {
+      case ESC_START:
+        data_out[size_out++] = ESC_START;
+        data_out[size_out++] = ESC_55;
+        break;
+      case MAGIC:
+        data_out[size_out++] = ESC_START;
+        data_out[size_out++] = ESC_AA;
+        break;
+      default:
+        data_out[size_out++] = data_in[i];
+        break;
+    }
+  }
+  return size_out;
+}
+
+size_t LE2Component::slip_decode_inplace(uint8_t *data, size_t size_in) {
+  size_t write_index = 0;
+  if (size_in == 0) {
+    return 0;
+  }
+  if (data[0] != MAGIC) {
+    ESP_LOGE(TAG, "Invalid frame start byte: 0x%02X", data[0]);
+    return 0;
+  }
+  for (size_t read_index = 1; read_index < size_in; ++read_index) {
+    if (data[read_index] == ESC_START) {
+      read_index++;
+      if (read_index < size_in) {
+        if (data[read_index] == ESC_AA) {
+          data[write_index++] = MAGIC;
+        } else if (data[read_index] == ESC_55) {
+          data[write_index++] = ESC_START;
+        } else {
+          ESP_LOGE(TAG, "Invalid escape sequence: 0x%02X", data[read_index]);
+          return 0;
+        }
+      }
+    } else {
+      data[write_index++] = data[read_index];
+    }
+  }
+  return write_index;
+}
+// End of SLIP protocol
+//////////////////////////////////////
 
 }  // namespace le2
 }  // namespace esphome
