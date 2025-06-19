@@ -94,11 +94,13 @@ sensor:
       active_power: "Phase Active Power"
       reactive_power: "Phase Reactive Power"
       power_factor: "Phase Power Factor"
+      apparent_power: "Phase Apparent Power"
     neutral:
       current: "Neutral Current"
       active_power: "Neutral Active Power"
       reactive_power: "Neutral Reactive Power"
       power_factor: "Neutral Power Factor"
+      apparent_power: "Neutral Apparent Power"
 
 text_sensor:
   - platform: le2

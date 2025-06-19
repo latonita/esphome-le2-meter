@@ -28,7 +28,6 @@ static const uint8_t ESC_START = 0x55;
 static const uint8_t ESC_AA = 0x01;
 static const uint8_t ESC_55 = 0x02;
 
-
 #pragma pack(1)
 typedef struct {
   uint8_t length;         // Length of the frame, including header and CRC16
@@ -178,45 +177,43 @@ void LE2Component::loop() {
 
     case State::PUBLISH_INFO: {
       this->log_state_();
-      // // Update status text sensor based on the data we were able to collect
-      // if (this->data_.got == (MASK_GOT_DATE_TIME | MASK_GOT_ACTIVE_POWER | MASK_GOT_ENERGY)) {
-      //   this->data_.failure = false;
-      //   this->data_.initialized = true;
-      //   if (this->reading_state_ != nullptr) {
-      //     this->reading_state_->publish_state(STATE_OK);
-      //   }
-      //   this->data_.lastGoodRead_ms = millis();
-      // } else {
-      //   ESP_LOGW(TAG, "Got no or partial data %o", this->data_.got);
-      //   this->data_.failure = true;
-      //   if (this->reading_state_ != nullptr) {
-      //     this->reading_state_->publish_state((this->data_.got == 0) ? STATE_DATA_FAIL : STATE_PARTIAL_OK);
-      //   }
-      // }
+      this->state_ = State::IDLE;
+      ESP_LOGD(TAG, "Data errors %d, proper reads %d", this->data_.read_errors, this->data_.proper_reads);
+
+      if (!this->data_.meter_found) {
+        if (this->reading_state_text_sensor_ != nullptr) {
+          this->reading_state_text_sensor_->publish_state(STATE_METER_NOT_FOUND);
+        }
+        return;
+      }
+
+      if (this->data_.got == (MASK_GOT_CONSUMPTION | MASK_GOT_GRID_DATA | MASK_GOT_METER_INFO)) {
+        if (this->reading_state_text_sensor_ != nullptr) {
+          this->reading_state_text_sensor_->publish_state(STATE_OK);
+        }
+      } else {
+        ESP_LOGW(TAG, "Got no or partial data %o", this->data_.got);
+        if (this->reading_state_text_sensor_ != nullptr) {
+          this->reading_state_text_sensor_->publish_state((this->data_.got == 0) ? STATE_DATA_FAIL : STATE_PARTIAL_OK);
+        }
+      }
+
       if (this->data_.got) {
         this->data_.last_good_read_ms = millis();
       }
 
-      if (this->data_.meter_found) {
-        if (this->network_address_text_sensor_ != nullptr) {
-          this->network_address_text_sensor_->publish_state(to_string(this->data_.meter_info.network_address));
-        }
-        if (this->serial_nr_text_sensor_ != nullptr) {
-          this->serial_nr_text_sensor_->publish_state(to_string(this->data_.meter_info.serial_number));
-        }
-        if (this->error_code_text_sensor_ != nullptr) {
-          this->error_code_text_sensor_->publish_state(to_string(this->data_.meter_info.error_code));
-        }
-        if (this->reading_state_text_sensor_ != nullptr && !this->data_.initialized) {
-          this->reading_state_text_sensor_->publish_state(STATE_METER_FOUND);
-        }
-        if (this->about_text_sensor_ != nullptr) {
-          this->about_text_sensor_->publish_state(this->data_.meter_info.about_str);
-        }
-      } else {
-        if (this->reading_state_text_sensor_ != nullptr && !this->data_.initialized) {
-          this->reading_state_text_sensor_->publish_state(STATE_METER_NOT_FOUND);
-        }
+      if (this->network_address_text_sensor_ != nullptr) {
+        this->network_address_text_sensor_->publish_state(to_string(this->data_.meter_info.network_address));
+      }
+      if (this->serial_nr_text_sensor_ != nullptr) {
+        this->serial_nr_text_sensor_->publish_state(to_string(this->data_.meter_info.serial_number));
+      }
+      if (this->error_code_text_sensor_ != nullptr) {
+        this->error_code_text_sensor_->publish_state(to_string(this->data_.meter_info.error_code));
+      }
+
+      if (this->about_text_sensor_ != nullptr) {
+        this->about_text_sensor_->publish_state(this->data_.meter_info.about_str);
       }
 
       if (this->data_.got & MASK_GOT_CONSUMPTION) {
@@ -265,8 +262,6 @@ void LE2Component::loop() {
         }
       }
 
-      ESP_LOGD(TAG, "Data errors %d, proper reads %d", this->data_.read_errors, this->data_.proper_reads);
-      this->state_ = State::IDLE;
     } break;
 
     default:
@@ -448,8 +443,8 @@ bool LE2Component::process_received_data() {
       this->data_.meter_info.error_code = res.error;
 
       time_t d = res.production_date;
-      strftime(this->data_.meter_info.production_date_str, sizeof(this->data_.meter_info.production_date_str), "%Y-%m-%d",
-               localtime(&d));
+      strftime(this->data_.meter_info.production_date_str, sizeof(this->data_.meter_info.production_date_str),
+               "%Y-%m-%d", localtime(&d));
       snprintf(this->data_.meter_info.about_str, sizeof(this->data_.meter_info.about_str),
                "Typ: %u, HW: %u, FW: %u, Prod: %s", res.type, res.hw_ver, res.fw_ver,
                this->data_.meter_info.production_date_str);

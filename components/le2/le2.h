@@ -63,8 +63,6 @@ struct InternalDataState {
   uint32_t proper_reads{0};
   uint32_t read_errors{0};
   bool meter_found{false};
-  bool initialized{false};
-  bool failure{false};
   uint8_t got{0};
   uint32_t last_good_read_ms{0};
 };
