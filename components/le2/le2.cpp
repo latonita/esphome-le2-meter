@@ -127,9 +127,11 @@ void LE2Component::set_phase_measurements_sensor(uint8_t phase, uint8_t measurem
 }
 
 void LE2Component::setup() {
+#ifdef USE_TEXT_SENSOR
   if (this->reading_state_text_sensor_ != nullptr) {
     this->reading_state_text_sensor_->publish_state(STATE_BOOTUP_WAIT);
   }
+#endif
 
   this->set_timeout(1000, [this]() { this->state_ = State::IDLE; });
 }
@@ -181,27 +183,34 @@ void LE2Component::loop() {
       ESP_LOGD(TAG, "Data errors %d, proper reads %d", this->data_.read_errors, this->data_.proper_reads);
 
       if (!this->data_.meter_found) {
+#ifdef USE_TEXT_SENSOR
         if (this->reading_state_text_sensor_ != nullptr) {
           this->reading_state_text_sensor_->publish_state(STATE_METER_NOT_FOUND);
         }
+#endif
         return;
       }
 
       if (this->data_.got == (MASK_GOT_CONSUMPTION | MASK_GOT_GRID_DATA | MASK_GOT_METER_INFO)) {
+#ifdef USE_TEXT_SENSOR
         if (this->reading_state_text_sensor_ != nullptr) {
           this->reading_state_text_sensor_->publish_state(STATE_OK);
         }
+#endif
       } else {
         ESP_LOGW(TAG, "Got no or partial data %o", this->data_.got);
+#ifdef USE_TEXT_SENSOR
         if (this->reading_state_text_sensor_ != nullptr) {
           this->reading_state_text_sensor_->publish_state((this->data_.got == 0) ? STATE_DATA_FAIL : STATE_PARTIAL_OK);
         }
+#endif
       }
 
       if (this->data_.got) {
         this->data_.last_good_read_ms = millis();
       }
 
+#ifdef USE_TEXT_SENSOR
       if (this->network_address_text_sensor_ != nullptr) {
         this->network_address_text_sensor_->publish_state(to_string(this->data_.meter_info.network_address));
       }
@@ -215,6 +224,7 @@ void LE2Component::loop() {
       if (this->about_text_sensor_ != nullptr) {
         this->about_text_sensor_->publish_state(this->data_.meter_info.about_str);
       }
+#endif
 
       if (this->data_.got & MASK_GOT_CONSUMPTION) {
         for (uint8_t consumption_type = 0; consumption_type < CONSUMPTION_TYPE_COUNT; ++consumption_type) {
@@ -225,6 +235,7 @@ void LE2Component::loop() {
             }
           }
         }
+#ifdef USE_TEXT_SENSOR
         if (this->electricity_tariff_text_sensor_ != nullptr) {
           char tariff_str[3];
           tariff_str[0] = 'T';
@@ -242,6 +253,7 @@ void LE2Component::loop() {
         if (this->datetime_text_sensor_ != nullptr) {
           this->datetime_text_sensor_->publish_state(this->data_.datetime_str);
         }
+#endif
       }
 
       if (this->data_.got & MASK_GOT_GRID_DATA) {
