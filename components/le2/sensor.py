@@ -7,7 +7,7 @@ from esphome.const import (
     CONF_APPARENT_POWER,
     CONF_EXPORT_ACTIVE_ENERGY,
     CONF_EXPORT_REACTIVE_ENERGY,
-    CONF_FREQUENCY,    
+    CONF_FREQUENCY,
     CONF_ID,
     CONF_IMPORT_ACTIVE_ENERGY,
     CONF_IMPORT_REACTIVE_ENERGY,
@@ -15,10 +15,15 @@ from esphome.const import (
     CONF_POWER_FACTOR,
     CONF_REACTIVE_POWER,
     CONF_VOLTAGE,
+    DEVICE_CLASS_APPARENT_POWER,
     DEVICE_CLASS_CURRENT,
     DEVICE_CLASS_ENERGY,
+    DEVICE_CLASS_FREQUENCY,
+    DEVICE_CLASS_REACTIVE_ENERGY,
+    DEVICE_CLASS_REACTIVE_POWER,
     DEVICE_CLASS_POWER_FACTOR,
     DEVICE_CLASS_POWER,
+    DEVICE_CLASS_VOLTAGE,
     ICON_CURRENT_AC,
     ICON_POWER,
     STATE_CLASS_MEASUREMENT,
@@ -64,7 +69,7 @@ TARIFF_CONSUMPTION_SENSORS = {
         sensor.sensor_schema(
             unit_of_measurement=UNIT_VOLT_AMPS_REACTIVE_HOURS,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_ENERGY,
+            device_class=DEVICE_CLASS_REACTIVE_ENERGY,
             state_class=STATE_CLASS_TOTAL_INCREASING,
             icon="mdi:transmission-tower-export",
         ),
@@ -84,7 +89,7 @@ TARIFF_CONSUMPTION_SENSORS = {
         sensor.sensor_schema(
             unit_of_measurement=UNIT_VOLT_AMPS_REACTIVE_HOURS,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_ENERGY,
+            device_class=DEVICE_CLASS_REACTIVE_ENERGY,
             state_class=STATE_CLASS_TOTAL_INCREASING,
             icon="mdi:transmission-tower-import",
         ),
@@ -122,7 +127,7 @@ PHASE_SENSORS = {
         sensor.sensor_schema(
             unit_of_measurement=UNIT_VOLT_AMPS_REACTIVE,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_POWER,
+            device_class=DEVICE_CLASS_REACTIVE_POWER,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         key=CONF_NAME,
@@ -140,7 +145,7 @@ PHASE_SENSORS = {
         sensor.sensor_schema(
             unit_of_measurement=UNIT_VOLT_AMPS,
             accuracy_decimals=3,
-            icon=ICON_VOLTAGE,
+            device_class=DEVICE_CLASS_APPARENT_POWER,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         key=CONF_NAME,
@@ -166,8 +171,8 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_FREQUENCY): cv.maybe_simple_value(
             sensor.sensor_schema(
                 unit_of_measurement=UNIT_HERTZ,
-                icon=ICON_CURRENT_AC,
                 accuracy_decimals=3,
+                device_class=DEVICE_CLASS_FREQUENCY,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             key=CONF_NAME,
@@ -176,14 +181,13 @@ CONFIG_SCHEMA = cv.Schema(
             sensor.sensor_schema(
                 unit_of_measurement=UNIT_VOLT,
                 accuracy_decimals=3,
-                icon=ICON_VOLTAGE,
+                device_class=DEVICE_CLASS_VOLTAGE,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_PHASE): PHASE_SCHEMA,
         cv.Optional(CONF_NEUTRAL): PHASE_SCHEMA,
-
     }
 )
 
