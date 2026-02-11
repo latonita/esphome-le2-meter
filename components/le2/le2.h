@@ -2,8 +2,12 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/uart/uart.h"
+#ifdef USE_SENSOR
 #include "esphome/components/sensor/sensor.h"
+#endif
+#ifdef USE_TEXT_SENSOR
 #include "esphome/components/text_sensor/text_sensor.h"
+#endif
 
 namespace esphome {
 namespace le2 {
@@ -74,8 +78,10 @@ enum class EnqCmd : uint8_t {
 };
 
 class LE2Component : public PollingComponent, public uart::UARTDevice {
+#ifdef USE_SENSOR
   SUB_SENSOR(frequency)
   SUB_SENSOR(voltage)
+#endif
 
 #ifdef USE_TEXT_SENSOR
   SUB_TEXT_SENSOR(electricity_tariff)
@@ -92,8 +98,10 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
  public:
   LE2Component() = default;
 
+#ifdef USE_SENSOR
   void set_tariff_consumption_sensor(uint8_t consumption_type, uint8_t tariff, sensor::Sensor *sensor);
   void set_phase_measurements_sensor(uint8_t phase, uint8_t measurement, sensor::Sensor *sensor);
+#endif
 
   void set_flow_control_pin(GPIOPin *flow_control_pin) { this->flow_control_pin_ = flow_control_pin; }
   void set_receive_timeout(uint32_t receive_timeout) { this->receive_timeout_ = receive_timeout; }
@@ -109,8 +117,10 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   void update() override;
 
  protected:
+#ifdef USE_SENSOR
   sensor::Sensor *tariff_consumption_[4][8] = {{nullptr}};
   sensor::Sensor *phase_measurements_[2][5] = {{nullptr}};
+#endif
 
   GPIOPin *flow_control_pin_{nullptr};
   uint32_t receive_timeout_{2000};
