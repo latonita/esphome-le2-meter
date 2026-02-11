@@ -136,7 +136,7 @@ PHASE_SENSORS = {
         ),
         key=CONF_NAME,
     ),
-    cv.Optional(CONF_APPARENT_POWER): cv.maybe_simple_value(
+    CONF_APPARENT_POWER: cv.maybe_simple_value(
         sensor.sensor_schema(
             unit_of_measurement=UNIT_VOLT_AMPS,
             accuracy_decimals=3,
