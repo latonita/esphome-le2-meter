@@ -39,54 +39,64 @@ CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_LE2_ID): cv.use_id(LE2Component),
         cv.Optional(CONF_ELECTRO_TARIFF): cv.maybe_simple_value(
-            text_sensor.text_sensor_schema(),
+            text_sensor.text_sensor_schema(
+                icon="mdi:sun-clock-outline",
+            ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_DATE): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:calendar",
             ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_TIME): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:clock-outline",
             ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_DATETIME): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:calendar-clock",
             ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_NETWORK_ADDRESS): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:serial-port",
             ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_SERIAL_NR): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:numeric",
             ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_READING_STATE): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:state-machine",
             ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_ERROR_CODE): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:alert-circle-outline",
             ),
             key=CONF_NAME,
         ),
         cv.Optional(CONF_ABOUT): cv.maybe_simple_value(
             text_sensor.text_sensor_schema(
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                icon="mdi:information-outline",
             ),
             key=CONF_NAME,
         ),
