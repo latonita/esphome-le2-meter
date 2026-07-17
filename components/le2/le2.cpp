@@ -2,6 +2,8 @@
 #include "esphome/core/application.h"
 #include "esphome/core/log.h"
 
+#include <inttypes.h>
+
 #define STATE_BOOTUP_WAIT "Waiting to boot up"
 #define STATE_METER_NOT_FOUND "Meter not found"
 #define STATE_METER_FOUND "Meter found"
@@ -90,7 +92,7 @@ float LE2Component::get_setup_priority() const { return setup_priority::AFTER_WI
 void LE2Component::dump_config() {
   ESP_LOGCONFIG(TAG, "LE-2:");
   LOG_UPDATE_INTERVAL(this);
-  ESP_LOGCONFIG(TAG, "  Meter address requested: %u", this->requested_meter_address_);
+  ESP_LOGCONFIG(TAG, "  Meter address requested: %" PRIu32, this->requested_meter_address_);
   ESP_LOGCONFIG(TAG, "  Receive timeout: %.1fs", this->receive_timeout_ / 1e3f);
   ESP_LOGCONFIG(TAG, "  Update interval: %.1fs", this->update_interval_ / 1e3f);
   LOG_PIN("  Flow Control Pin: ", this->flow_control_pin_);
@@ -107,7 +109,8 @@ void LE2Component::dump_config() {
   // LOG_TEXT_SENSOR("  ", "Network address", this->network_address_);
   // LOG_TEXT_SENSOR("  ", "Serial number", this->serial_nr_);
   //  this->check_uart_settings(9600, 1, uart::UART_CONFIG_PARITY_EVEN, 8);
-  ESP_LOGCONFIG(TAG, "Data errors %d, proper reads %d", this->data_.read_errors, this->data_.proper_reads);
+  ESP_LOGCONFIG(TAG, "Data errors %" PRIu32 ", proper reads %" PRIu32, this->data_.read_errors,
+                this->data_.proper_reads);
 }
 
 #ifdef USE_SENSOR
@@ -184,7 +187,8 @@ void LE2Component::loop() {
     case State::PUBLISH_INFO: {
       this->log_state_();
       this->state_ = State::IDLE;
-      ESP_LOGD(TAG, "Data errors %d, proper reads %d", this->data_.read_errors, this->data_.proper_reads);
+      ESP_LOGD(TAG, "Data errors %" PRIu32 ", proper reads %" PRIu32, this->data_.read_errors,
+               this->data_.proper_reads);
 
       if (!this->data_.meter_found) {
 #ifdef USE_TEXT_SENSOR
@@ -470,8 +474,8 @@ bool LE2Component::process_received_data() {
                this->data_.meter_info.production_date_str);
 
       ESP_LOGI(TAG,
-               "Got reply from meter with s/n %u (0x%08X), network address %u, "
-               "fw ver. %02X hw ver. %02X, type %02X, production date %s, error code %llu",
+               "Got reply from meter with s/n %" PRIu32 " (0x%08" PRIX32 "), network address %" PRIu32 ", "
+               "fw ver. %02X hw ver. %02X, type %02X, production date %s, error code %" PRIu64,
                res.serial_number, res.serial_number, res.network_address, res.fw_ver, res.hw_ver, res.type,
                this->data_.meter_info.production_date_str, res.error);
 
