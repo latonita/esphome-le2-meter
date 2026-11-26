@@ -165,6 +165,7 @@ class LE2Component : public PollingComponent, public uart::UARTDevice {
   
   const char *state_to_string(State state);
   void log_state_(State *next_state = nullptr);
+  void log_hex_(const char *dir, const uint8_t *data, size_t len);
 
   uint16_t crc_16_iec(const uint8_t *buffer, uint16_t len);
   size_t slip_encode(uint8_t *data_out, const uint8_t *data_in, size_t size_in);

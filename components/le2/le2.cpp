@@ -1,5 +1,6 @@
 #include "le2.h"
 #include "esphome/core/application.h"
+#include <algorithm>
 #include "esphome/core/log.h"
 
 #include <inttypes.h>
@@ -325,7 +326,7 @@ void LE2Component::send_enquiry_command(EnqCmd cmd) {
   if (this->flow_control_pin_ != nullptr)
     this->flow_control_pin_->digital_write(false);
 
-  ESP_LOGVV(TAG, "TX: %s", format_hex_pretty(txBufferFrame, frame_size).c_str());
+  this->log_hex_("TX", txBufferFrame, frame_size);
 }
 
 void LE2Component::start_async_request(EnqCmd cmd, uint16_t expected_size, State next_state) {
@@ -351,8 +352,7 @@ bool LE2Component::process_response() {
     ESP_LOGE(TAG, "Response timeout, most likely password is wrong or meter is not responding");
     this->data_.read_errors++;
     if (tracker.bytes_read > 0) {
-      ESP_LOGVV(TAG, "RX: %s",
-                format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read).c_str());
+      this->log_hex_("RX", static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read);
     }
     this->state_ = this->next_state_;
     return false;
@@ -379,8 +379,7 @@ bool LE2Component::process_response() {
   }
 
   ESP_LOGV(TAG, "Received all bytes, validating...");
-  ESP_LOGVV(TAG, "RX: %s",
-            format_hex_pretty(static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read).c_str());
+  this->log_hex_("RX", static_cast<const uint8_t *>(rxBuffer.data()), tracker.bytes_read);
 
   size_t decoded_size = slip_decode_inplace(rxBuffer.data(), tracker.bytes_read);
   if (decoded_size == 0) {
@@ -595,6 +594,19 @@ size_t LE2Component::slip_decode_inplace(uint8_t *data, size_t size_in) {
 }
 // End of SLIP protocol
 //////////////////////////////////////
+
+// Hex dump at VERY_VERBOSE, split into short lines: keeps the stack buffer small
+// and stays under the logger's line length limit.
+void LE2Component::log_hex_(const char *dir, const uint8_t *data, size_t len) {
+#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERY_VERBOSE
+  static constexpr size_t CHUNK = 32;
+  char hex_buf[format_hex_pretty_size(CHUNK)];
+  for (size_t off = 0; off < len; off += CHUNK) {
+    size_t n = std::min(CHUNK, len - off);
+    ESP_LOGVV(TAG, "%s[%u]: %s", dir, static_cast<unsigned>(off), format_hex_pretty_to(hex_buf, data + off, n, '.'));
+  }
+#endif
+}
 
 }  // namespace le2
 }  // namespace esphome
